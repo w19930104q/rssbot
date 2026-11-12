@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Feedly export</title></head>
+  <body>
+    <outline text="Technology" title="Technology">
+      <outline text="Rust" title="Rust">
+        <outline type="rss" text="This Week in Rust" title="This Week in Rust"
+                 xmlUrl="https://rust-weekly.example.com/feed.xml"/>
+        <outline type="rss" text="Rust Blog &amp; Friends" title="Rust Blog &amp; Friends"
+                 xmlUrl="https://blog.rust-lang.org/feed.xml"/>
+      </outline>
+      <outline type="rss" text="Hacker News"
+               xmlUrl="https://news.ycombinator.com/rss"/>
+    </outline>
+    <outline text="Personal" title="Personal">
+      <outline type="rss" text="中文资讯 &lt;测试&gt;" title="中文资讯 &lt;测试&gt;"
+               xmlUrl="https://cn.example.com/rss?lang=zh&amp;fmt=rss"/>
+    </outline>
+    <outline type="rss" text="Top level feed" title="Top level feed"
+             xmlUrl="http://toplevel.example.com/atom.xml"/>
+  </body>
+</opml>

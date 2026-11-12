@@ -24,6 +24,7 @@ mod data;
 mod feed;
 mod fetcher;
 mod gardener;
+mod import;
 mod messages;
 mod opml;
 
@@ -38,12 +39,9 @@ static BOT_ID: OnceLock<tbot::types::user::Id> = OnceLock::new();
     after_help = "NOTE: You can get <user id> using bots like @userinfobot @getidsbot"
 )]
 pub struct Opt {
-    /// Telegram bot token
-    #[structopt(
-        env = "RSSBOT_TOKEN",
-        hide_env_values = true
-    )]
-    token: String,
+    /// Telegram bot token (not required for offline commands)
+    #[structopt(env = "RSSBOT_TOKEN", hide_env_values = true)]
+    token: Option<String>,
     /// Path to database
     #[structopt(
         short = "d",
@@ -52,6 +50,15 @@ pub struct Opt {
         default_value = "./rssbot.json"
     )]
     database: PathBuf,
+    /// Offline mode: import feeds from an OPML file into one subscriber,
+    /// then exit. No feed fetching or Telegram access happens.
+    /// Requires --subscriber.
+    #[structopt(long, value_name = "opml-path", requires = "subscriber")]
+    import_opml: Option<PathBuf>,
+    /// Subscriber (chat/user id) that the imported feeds are merged into.
+    /// Only meaningful together with --import-opml.
+    #[structopt(long, value_name = "user id", requires = "import-opml")]
+    subscriber: Option<i64>,
     /// Minimum fetch interval
     #[structopt(
         long,
@@ -128,9 +135,22 @@ async fn main() -> anyhow::Result<()> {
     enable_fail_fast();
 
     let opt = Opt::from_args();
+
+    // Offline command: never construct the Telegram client or fetch feeds.
+    if let Some(opml_path) = &opt.import_opml {
+        let subscriber = opt
+            .subscriber
+            .expect("structopt requires --subscriber with --import-opml");
+        return import::run_import(&opt.database, opml_path, subscriber)
+            .map(|code| process::exit(code));
+    }
+
     let db = Arc::new(Mutex::new(Database::open(opt.database.clone())?));
-    let bot_builder =
-        tbot::bot::Builder::with_string_token(opt.token.clone()).server_uri(opt.api_uri.clone());
+    let token = opt
+        .token
+        .clone()
+        .context("RSSBOT_TOKEN (or --token) is required to run the bot")?;
+    let bot_builder = tbot::bot::Builder::with_string_token(token).server_uri(opt.api_uri.clone());
     let bot = if let Some(proxy) = init_proxy() {
         bot_builder.proxy(proxy).build()
     } else {

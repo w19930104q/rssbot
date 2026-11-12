@@ -56,17 +56,47 @@ OPTIONS:
                                     multiple times to allow multiple admins
         --api-uri <tgapi-uri>       Custom telegram api URI [default: https://api.telegram.org/]
     -d, --database <path>           Path to database [default: ./rssbot.json]
+        --import-opml <opml-path>   离线模式：把 OPML 文件中的订阅导入指定 subscriber 后退出
+                                    （需配合 --subscriber，无需 bot token）
         --max-feed-size <bytes>     Maximum feed size, 0 is unlimited [default: 2097152]
         --max-interval <seconds>    Maximum fetch interval [default: 43200]
         --min-interval <seconds>    Minimum fetch interval [default: 300]
+        --subscriber <user id>      导入订阅合并到的 subscriber（配合 --import-opml 使用）
 
 ARGS:
-    <token>    Telegram bot token [env: RSSBOT_TOKEN]
+    <token>    Telegram bot token [env: RSSBOT_TOKEN]（离线命令不需要）
 
 NOTE: You can get <user id> using bots like @userinfobot @getidsbot
 ```
 
 `<token>` 请参照 [这里](https://core.telegram.org/bots#3-how-do-i-create-a-bot) 申请
+
+## 离线导入 OPML
+
+需要批量迁移 Pocket/Feedly 等导出的 OPML 时，可以使用离线的 `--import-opml`
+模式，无需启动机器人、不需要 bot token，也不会访问任何 feed 或 Telegram API：
+
+```bash
+rssbot -d rssbot.json --import-opml feeds.opml --subscriber 123456789
+```
+
+行为说明：
+
+- 递归遍历嵌套的 `<outline>` 分组，只导入 `xmlUrl` 为 `http://`/`https://`
+  的叶子节点；其他协议（`ftp:`、`file:` 等）、非法 URL 和纯分组节点会作为
+  诊断信息输出到 stderr，而不会让整批导入失败。
+- 按规范化后的 URL 去重（主机名大小写、默认端口、首尾空白会被归一化），
+  标题保留第一次出现的版本。
+- 标题和 URL 中的 XML 实体会正确解码为 UTF-8；写回时也会正确再转义。
+- 导入是*合并*语义：该 subscriber 已有的订阅、以及其他 subscriber 的数据
+  都会保留；数据库中已存在的 feed 只会增加一个订阅者。
+- 整个导入最终通过一次原子替换写入 JSON 数据库。解析失败或写入失败时，
+  旧数据库（以及内存状态）保持不变，导入要么全部成功要么完全不生效。
+- 导入的 feed 没有 TTL 和条目历史：机器人运行后按正常的
+  `--min-interval`/`--max-interval` 调度，首次在线抓取会推送当前已有条目
+  （离线状态下机器人无法读取 feed 内容）。
+- 重复执行同一份导入是幂等的，会报告新增订阅数为 0。
+
 
 ## 环境变量
 

@@ -4,6 +4,15 @@ version = "2.0.0-alpha.13"
 authors = ["iovxw <iovxw@outlook.com>"]
 edition = "2021"
 
+# Test-only library facade (see lib.rs) so integration tests under tests/
+# can reach internal modules; the shipped artifact is still the binary.
+[lib]
+path = "lib.rs"
+
+[[bin]]
+name = "rssbot"
+path = "src/main.rs"
+
 [features]
 default = ["rustls"]
 
@@ -37,6 +46,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 regex = "1.12"
 quick-xml = { version = "0.23", features = ["encoding", "escape-html"] }
+url = "2.5"
 chrono = "0.4"
 pinyin = "0.11"
 either = "1.16"
@@ -56,3 +66,6 @@ default-features = false
 version = "0.11"
 default-features = false
 features = ["gzip", "json"]
+
+[dev-dependencies]
+serde_json = "1.0"

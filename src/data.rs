@@ -25,7 +25,7 @@ fn gen_hash<T: Hash>(t: &T) -> u64 {
 }
 
 type FeedId = u64;
-type SubscriberId = i64;
+pub type SubscriberId = i64;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Feed {
@@ -34,7 +34,7 @@ pub struct Feed {
     pub down_time: Option<SystemTime>,
     pub subscribers: HashSet<SubscriberId, Size64>,
     pub ttl: Option<u32>,
-    hash_list: Vec<u64>,
+    pub hash_list: Vec<u64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -207,6 +207,85 @@ impl Database {
                 }
             })
             .is_some()
+    }
+
+    /// Merge a batch of feeds into one subscriber's subscriptions.
+    ///
+    /// All changes are applied in memory first and persisted with a single
+    /// atomic `save`: the JSON file is replaced via rename, so a failed
+    /// serialization/write leaves the previous database file intact. On write
+    /// failure the in-memory changes are rolled back as well, so a failed
+    /// import never mutates any observable state.
+    ///
+    /// Existing subscriptions of the target subscriber (and every other
+    /// subscriber) are preserved. Feeds new to the subscriber but already
+    /// present in the database only gain one more subscriber.
+    ///
+    /// Returns the number of newly added subscriptions.
+    pub fn import_feeds(
+        &mut self,
+        subscriber: SubscriberId,
+        feeds: &[crate::opml::OpmlFeed],
+    ) -> Result<usize, DataError> {
+        let subscriber_existed = self.subscribers.contains_key(&subscriber);
+        // `(feed id, whether the Feed entry itself was created here)`
+        let mut applied: Vec<(FeedId, bool)> = Vec::new();
+        let mut added = 0;
+
+        for feed in feeds {
+            let feed_id = gen_hash(&feed.link);
+            let already_subscribed = self
+                .subscribers
+                .get(&subscriber)
+                .map(|set| set.contains(&feed_id))
+                .unwrap_or(false);
+            if already_subscribed {
+                continue;
+            }
+
+            let feed_was_new = !self.feeds.contains_key(&feed_id);
+            self.subscribers
+                .entry(subscriber)
+                .or_default()
+                .insert(feed_id);
+            let entry = self.feeds.entry(feed_id).or_insert_with(|| Feed {
+                link: feed.link.clone(),
+                title: feed.title.clone(),
+                down_time: None,
+                ttl: None,
+                hash_list: Vec::new(),
+                subscribers: HashSet::default(),
+            });
+            entry.subscribers.insert(subscriber);
+            applied.push((feed_id, feed_was_new));
+            added += 1;
+        }
+
+        if added == 0 {
+            return Ok(0);
+        }
+
+        if let Err(e) = self.save() {
+            // Roll back every in-memory change so the old state survives too.
+            for (feed_id, feed_was_new) in &applied {
+                let feed_id = *feed_id;
+                if *feed_was_new {
+                    self.feeds.remove(&feed_id);
+                } else if let Some(feed) = self.feeds.get_mut(&feed_id) {
+                    feed.subscribers.remove(&subscriber);
+                }
+            }
+            if !subscriber_existed {
+                self.subscribers.remove(&subscriber);
+            } else if let Some(set) = self.subscribers.get_mut(&subscriber) {
+                for (feed_id, _) in &applied {
+                    set.remove(feed_id);
+                }
+            }
+            return Err(e);
+        }
+
+        Ok(added)
     }
 
     pub fn update_subscriber(&mut self, from: SubscriberId, to: SubscriberId) -> bool {

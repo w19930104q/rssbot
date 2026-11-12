@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <body>
+    <outline type="rss" text="First" xmlUrl="https://dup.example.com/feed"/>
+    <outline type="rss" text="Second spelling" xmlUrl="https://DUP.example.com/feed"/>
+    <outline type="rss" text="FTP must be rejected" xmlUrl="ftp://files.example.com/dump"/>
+    <outline type="rss" text="Broken URL" xmlUrl="not a url"/>
+    <outline type="rss" text="File URL" xmlUrl="file:///etc/passwd"/>
+    <outline type="rss" text="Empty" xmlUrl="   "/>
+    <outline text="A plain group without xmlUrl">
+      <outline type="rss" text="Nested good one" xmlUrl="https://nested.example.com/rss"/>
+    </outline>
+  </body>
+</opml>

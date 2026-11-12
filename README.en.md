@@ -58,17 +58,54 @@ OPTIONS:
                                     multiple times to allow multiple admins
         --api-uri <tgapi-uri>       Custom telegram api URI [default: https://api.telegram.org/]
     -d, --database <path>           Path to database [default: ./rssbot.json]
+        --import-opml <opml-path>   Offline: import feeds from an OPML file into one subscriber, then exit
+                                    (requires --subscriber; no bot token needed)
         --max-feed-size <bytes>     Maximum feed size, 0 is unlimited [default: 2097152]
         --max-interval <seconds>    Maximum fetch interval [default: 43200]
         --min-interval <seconds>    Minimum fetch interval [default: 300]
+        --subscriber <user id>      Subscriber to merge the imported feeds into (with --import-opml)
 
 ARGS:
-    <token>    Telegram bot token [env: RSSBOT_TOKEN]
+    <token>    Telegram bot token [env: RSSBOT_TOKEN] (not required for offline commands)
 
 NOTE: You can get <user id> using bots like @userinfobot @getidsbot
 ```
 
 Please read the [official docs](https://core.telegram.org/bots#3-how-do-i-create-a-bot) to create a token.
+
+## Offline OPML import
+
+To bulk-migrate an OPML export (e.g. from Pocket or Feedly) without starting
+the bot, use the offline `--import-opml` mode. It never accesses a feed or
+the Telegram API and does not need a bot token:
+
+```bash
+rssbot -d rssbot.json --import-opml feeds.opml --subscriber 123456789
+```
+
+Behavior:
+
+- Nested `<outline>` groups are walked recursively; only leaves with an
+  `http://`/`https://` `xmlUrl` are imported. Other schemes (`ftp:`,
+  `file:`, …), malformed URLs and group outlines are reported as
+  diagnostics on stderr instead of aborting the batch.
+- Feeds are deduplicated by their normalized URL (host case, default ports
+  and surrounding whitespace are folded together); the first title wins.
+- XML entities in titles and URLs are decoded into UTF-8; values are
+  re-escaped correctly when they are written back out.
+- The feeds are *merged* into the given subscriber: its existing
+  subscriptions and every other subscriber's data are preserved, and feeds
+  already present in the database simply gain one more subscriber.
+- The whole import ends in a single atomic replacement of the JSON
+  database. A parse error or a failed write leaves the previous database
+  (and the in-memory state) untouched, so an import is all-or-nothing.
+- Imported feeds have no TTL or item history: they follow the normal
+  `--min-interval`/`--max-interval` scheduling once the bot runs, and their
+  current items are delivered on the first online fetch (the bot cannot
+  inspect a feed while offline).
+- Re-running the same import is idempotent and reports zero new
+  subscriptions.
+
 
 ## Environment variables
 
